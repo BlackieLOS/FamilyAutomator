@@ -10,5 +10,5 @@ export type QuizSubmitResult =
       risk_flag: false;
       category_scores: Record<string, number>;
       top_categories: [string, string];
-      archetype: { name: string; description: string };
+      archetype: { name: string; description: string; statPercentage: number };
     };

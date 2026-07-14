@@ -16,7 +16,7 @@ export default function QuizPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, QuizAnswer>>({});
-  const [status, setStatus] = useState<"answering" | "submitting" | "done" | "error">(
+  const [status, setStatus] = useState<"answering" | "submitting" | "error">(
     "answering",
   );
 
@@ -67,7 +67,7 @@ export default function QuizPage() {
       }
 
       sessionStorage.setItem(RESULT_STORAGE_KEY, JSON.stringify(result));
-      setStatus("done");
+      router.push("/quiz/result");
     } catch {
       setStatus("error");
     }
@@ -100,20 +100,6 @@ export default function QuizPage() {
           >
             Try again
           </button>
-        </div>
-      </main>
-    );
-  }
-
-  if (status === "done") {
-    return (
-      <main className="flex flex-1 items-center justify-center px-6 py-16">
-        <div className="max-w-md text-center">
-          <h1 className="text-2xl font-semibold">Thanks for sharing.</h1>
-          <p className="mt-4 text-neutral-600 dark:text-neutral-400">
-            Your answers have been scored. Your personalized result screen
-            is next.
-          </p>
         </div>
       </main>
     );
