@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { FREE_TEXT_MAX_LENGTH } from "@/lib/quiz-questions";
 import {
@@ -7,7 +9,10 @@ import {
 } from "@/lib/quiz-categories";
 import { resolveArchetype } from "@/lib/archetypes";
 import { screenForRisk } from "@/lib/risk-screen";
+import { prisma } from "@/lib/db";
 import type { QuizAnswer, QuizSubmitResult } from "@/types/quiz";
+
+const SESSION_COOKIE = "tc_session_id";
 
 const VALID_QUESTION_IDS = new Set(
   QUESTION_CATEGORY_ORDER.map((q) => q.questionId),
@@ -68,11 +73,26 @@ export async function POST(request: Request) {
   const notes = answers.map((a) => a.note ?? "");
   const riskFlag = screenForRisk(notes);
 
+  const cookieStore = await cookies();
+  let sessionId = cookieStore.get(SESSION_COOKIE)?.value;
+  if (!sessionId) sessionId = randomUUID();
+
   if (riskFlag) {
     // Log the flag for internal awareness without the free-text content itself.
     console.warn("[quiz/submit] risk_flag raised for a submission");
+    await prisma.quizResponse.create({
+      data: {
+        sessionId,
+        answers,
+        categoryScores: {},
+        archetype: "",
+        riskFlag: true,
+      },
+    });
     const result: QuizSubmitResult = { risk_flag: true };
-    return NextResponse.json(result);
+    const res = NextResponse.json(result);
+    res.cookies.set(SESSION_COOKIE, sessionId, { httpOnly: true, sameSite: "lax" });
+    return res;
   }
 
   const categoryScores: Record<string, number> = {};
@@ -90,11 +110,24 @@ export async function POST(request: Request) {
   const top2: [Category, Category] = [ranked[0].category, ranked[1].category];
   const archetype = resolveArchetype(top2);
 
+  const quizResponse = await prisma.quizResponse.create({
+    data: {
+      sessionId,
+      answers,
+      categoryScores,
+      archetype: archetype.name,
+      riskFlag: false,
+    },
+  });
+
   const result: QuizSubmitResult = {
     risk_flag: false,
+    quiz_response_id: quizResponse.id,
     category_scores: categoryScores,
     top_categories: top2,
     archetype,
   };
-  return NextResponse.json(result);
+  const res = NextResponse.json(result);
+  res.cookies.set(SESSION_COOKIE, sessionId, { httpOnly: true, sameSite: "lax" });
+  return res;
 }

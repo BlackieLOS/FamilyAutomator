@@ -1,0 +1,46 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// See docs/content-reference.md §9 for the reference schema.
+model QuizResponse {
+  id             String     @id @default(cuid())
+  sessionId      String
+  createdAt      DateTime   @default(now())
+  answers        Json
+  categoryScores Json
+  archetype      String
+  riskFlag       Boolean
+  purchases      Purchase[]
+}
+
+model Purchase {
+  id                String       @id @default(cuid())
+  quizResponseId    String
+  quizResponse      QuizResponse @relation(fields: [quizResponseId], references: [id])
+  provider          String // "stripe" | "paypal"
+  providerPaymentId String       @unique // Stripe Checkout Session ID / PayPal Order ID
+  amount            Int // minor units (cents / paise)
+  currency          String // "usd" | "inr"
+  status            String // "pending" | "paid" | "failed"
+  createdAt         DateTime     @default(now())
+  workbook          Workbook?
+}
+
+model Workbook {
+  id            String    @id @default(cuid())
+  purchaseId    String    @unique
+  purchase      Purchase  @relation(fields: [purchaseId], references: [id])
+  generatedText String?
+  pdfUrl        String?
+  deliveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+}

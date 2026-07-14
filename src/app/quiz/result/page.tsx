@@ -18,6 +18,8 @@ export default function ResultPage() {
   const router = useRouter();
   const [result, setResult] = useState<SuccessResult | null>(null);
   const [shareState, setShareState] = useState<"idle" | "copied">("idle");
+  const [checkoutMethod, setCheckoutMethod] = useState<"card" | "upi" | null>(null);
+  const [checkoutError, setCheckoutError] = useState(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem(RESULT_STORAGE_KEY);
@@ -63,6 +65,24 @@ export default function ResultPage() {
     }
   }
 
+  async function handleCheckout(method: "card" | "upi") {
+    setCheckoutMethod(method);
+    setCheckoutError(false);
+    try {
+      const res = await fetch("/api/checkout/stripe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quizResponseId: result?.quiz_response_id, method }),
+      });
+      if (!res.ok) throw new Error("Checkout failed");
+      const { url } = (await res.json()) as { url: string };
+      window.location.href = url;
+    } catch {
+      setCheckoutMethod(null);
+      setCheckoutError(true);
+    }
+  }
+
   return (
     <main className="flex flex-1 items-center justify-center px-6 py-16">
       <div className="w-full max-w-md text-center">
@@ -90,6 +110,46 @@ export default function ResultPage() {
           >
             {shareState === "copied" ? "Link copied" : "Share your result"}
           </button>
+        </div>
+
+        <div className="mt-10 rounded-xl border border-neutral-200 p-6 text-left dark:border-neutral-800">
+          <p className="font-medium">
+            Want the full picture? Get your personalized workbook — tailored
+            red flags, journaling prompts, and a clear next step. $2.99.
+          </p>
+
+          <div className="mt-4 flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => handleCheckout("card")}
+              disabled={checkoutMethod !== null}
+              className="rounded-lg bg-neutral-900 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
+            >
+              {checkoutMethod === "card" ? "Redirecting…" : "Pay $2.99 with card"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleCheckout("upi")}
+              disabled={checkoutMethod !== null}
+              className="rounded-lg border border-neutral-300 px-6 py-2 text-sm font-medium transition-colors hover:border-neutral-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:hover:border-neutral-500"
+            >
+              {checkoutMethod === "upi" ? "Redirecting…" : "Pay ₹249 with UPI"}
+            </button>
+            <button
+              type="button"
+              disabled
+              title="PayPal checkout is coming soon"
+              className="rounded-lg border border-neutral-200 px-6 py-2 text-sm font-medium text-neutral-400 dark:border-neutral-800 dark:text-neutral-600"
+            >
+              Pay with PayPal (coming soon)
+            </button>
+          </div>
+
+          {checkoutError && (
+            <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+              Something went wrong starting checkout. Please try again.
+            </p>
+          )}
         </div>
 
         <Link
