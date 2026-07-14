@@ -1,20 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   FREE_TEXT_MAX_LENGTH,
   QUIZ_QUESTIONS,
   SCALE_LABELS,
 } from "@/lib/quiz-questions";
-import type { QuizAnswer } from "@/types/quiz";
+import type { QuizAnswer, QuizSubmitResult } from "@/types/quiz";
 
 const SCALE_VALUES = [1, 2, 3, 4, 5];
-const STORAGE_KEY = "tactic-check-quiz-answers";
+const RESULT_STORAGE_KEY = "tactic-check-quiz-result";
 
 export default function QuizPage() {
+  const router = useRouter();
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, QuizAnswer>>({});
-  const [submitted, setSubmitted] = useState(false);
+  const [status, setStatus] = useState<"answering" | "submitting" | "done" | "error">(
+    "answering",
+  );
 
   const question = QUIZ_QUESTIONS[step];
   const current = answers[question?.id];
@@ -39,14 +43,33 @@ export default function QuizPage() {
     }));
   }
 
-  function goNext() {
+  async function goNext() {
     if (!canAdvance) return;
-    if (isLastStep) {
-      const orderedAnswers = QUIZ_QUESTIONS.map((q) => answers[q.id]);
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(orderedAnswers));
-      setSubmitted(true);
-    } else {
+    if (!isLastStep) {
       setStep((s) => s + 1);
+      return;
+    }
+
+    setStatus("submitting");
+    const orderedAnswers = QUIZ_QUESTIONS.map((q) => answers[q.id]);
+    try {
+      const res = await fetch("/api/quiz/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers: orderedAnswers }),
+      });
+      if (!res.ok) throw new Error("Submit failed");
+      const result: QuizSubmitResult = await res.json();
+
+      if (result.risk_flag) {
+        router.push("/quiz/crisis");
+        return;
+      }
+
+      sessionStorage.setItem(RESULT_STORAGE_KEY, JSON.stringify(result));
+      setStatus("done");
+    } catch {
+      setStatus("error");
     }
   }
 
@@ -54,14 +77,42 @@ export default function QuizPage() {
     setStep((s) => Math.max(0, s - 1));
   }
 
-  if (submitted) {
+  if (status === "submitting") {
+    return (
+      <main className="flex flex-1 items-center justify-center px-6 py-16">
+        <p className="text-neutral-600 dark:text-neutral-400">Scoring your answers…</p>
+      </main>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <main className="flex flex-1 items-center justify-center px-6 py-16">
+        <div className="max-w-md text-center">
+          <h1 className="text-2xl font-semibold">Something went wrong.</h1>
+          <p className="mt-4 text-neutral-600 dark:text-neutral-400">
+            We couldn&apos;t score your answers. Please try again.
+          </p>
+          <button
+            type="button"
+            onClick={() => setStatus("answering")}
+            className="mt-6 rounded-lg bg-neutral-900 px-6 py-2 text-sm font-medium text-white dark:bg-neutral-100 dark:text-neutral-900"
+          >
+            Try again
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (status === "done") {
     return (
       <main className="flex flex-1 items-center justify-center px-6 py-16">
         <div className="max-w-md text-center">
           <h1 className="text-2xl font-semibold">Thanks for sharing.</h1>
           <p className="mt-4 text-neutral-600 dark:text-neutral-400">
-            Your responses have been saved. Scoring and your personalized
-            result are next.
+            Your answers have been scored. Your personalized result screen
+            is next.
           </p>
         </div>
       </main>
